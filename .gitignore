@@ -1,0 +1,15 @@
+# Ambiente
+.env
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+
+# Sistema
+.DS_Store
