@@ -129,6 +129,7 @@ class Deal(Base):
     )  # pending, approved, rejected, published
     published_tg: Mapped[bool] = mapped_column(Boolean, default=False)
     published_ig: Mapped[bool] = mapped_column(Boolean, default=False)
+    published_twitter: Mapped[bool] = mapped_column(Boolean, default=False)
     tg_message_id: Mapped[int | None] = mapped_column(Integer)
     ig_post_id: Mapped[str | None] = mapped_column(String(100))
 

@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Instalar o Chromium do Playwright (usado pelo bot/twitter_publisher.py)
+RUN playwright install --with-deps chromium
+
 # Copiar o código fonte
 COPY . .
 

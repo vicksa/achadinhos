@@ -22,10 +22,12 @@ MarkupSafe==3.0.3
 multidict==6.7.1
 packaging==26.2
 pillow==12.2.0
+playwright==1.60.0
 propcache==0.5.2
 pydantic==2.13.4
 pydantic-settings==2.14.1
 pydantic_core==2.46.4
+pyee==13.0.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-telegram-bot==22.8

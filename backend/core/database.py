@@ -55,3 +55,11 @@ async def init_db():
         # Necessária para busca sem acento (ex: "tenis" encontrar "Tênis")
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
         await conn.run_sync(Base.metadata.create_all)
+        # Colunas adicionadas depois da primeira instalação — como não usamos
+        # Alembic, garantimos aqui que bancos já existentes sejam atualizados.
+        await conn.execute(
+            text(
+                "ALTER TABLE IF EXISTS deals "
+                "ADD COLUMN IF NOT EXISTS published_twitter BOOLEAN DEFAULT false"
+            )
+        )

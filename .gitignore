@@ -5,6 +5,9 @@ backend/__pycache__/
 **/__pycache__/
 *.pyc
 
+# Sessão do navegador (Twitter/X) — contém cookies de login, é um segredo
+backend/data/
+
 # Node / Next.js
 frontend/node_modules/
 frontend/.next/

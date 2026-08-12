@@ -131,8 +131,43 @@ lugar acessível (ex: `docker compose up -d postgres redis`).
   se o Pelando ou o Promobit mudarem a estrutura do site, o scraper
   correspondente pode parar de funcionar — os logs vão indicar isso
   claramente (`Feed vazio`, `bloco de dados não encontrado`, etc.).
-- **Sem WhatsApp**: só Telegram por enquanto (WhatsApp exigiria uma lib não
-  oficial tipo Baileys, com risco de banimento do número).
+- **Sem WhatsApp**: só Telegram (+ Twitter/X opcional) por enquanto (WhatsApp
+  exigiria uma lib não oficial tipo Baileys, com risco de banimento do
+  número — decisão consciente de não implementar).
+
+## Twitter/X (opcional, desligado por padrão)
+
+⚠️ **Isto não usa a API oficial do X** — a API de escrita exige um plano
+pago pra publicar de forma automatizada. Em vez disso,
+`backend/bot/twitter_publisher.py` automatiza um navegador (Playwright)
+logado normalmente no X, simulando um usuário. Isso **viola os Termos de
+Uso do X** e pode resultar em **suspensão/banimento permanente da conta** —
+foi implementado por decisão explícita, ciente do risco.
+
+Mitigações que o código já aplica (não eliminam o risco, só reduzem):
+- Sessão logada fica salva em `backend/data/twitter_state.json` (persistido
+  pelo volume do Docker) e é reaproveitada — evita logins repetidos, que são
+  um forte sinal de automação.
+- Um único navegador é reaproveitado durante toda a execução do pipeline.
+- Não tenta contornar captcha nem verificação em duas etapas — se o X pedir
+  isso, a publicação daquele ciclo falha e fica registrada no log.
+
+**Pra habilitar:**
+1. Se a conta tiver **2FA ativado, desative antes** — o login automático
+   não sabe responder ao código.
+2. No `.env`:
+   ```
+   TWITTER_ENABLED=true
+   TWITTER_USERNAME=seu_usuario_ou_email
+   TWITTER_PASSWORD=sua_senha
+   ```
+3. Suba de novo o bot (`docker compose up -d --build bot`).
+
+Se o X pedir verificação adicional no primeiro login (comum pra logins
+"novos"/de servidor), o log do bot vai indicar isso — nesse caso pode ser
+necessário fazer o primeiro login manualmente numa sessão de navegador
+comum, salvar os cookies como `backend/data/twitter_state.json`, e a
+automação reaproveita dali em diante.
 
 ## Estrutura do projeto
 

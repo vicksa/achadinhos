@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     instagram_user_id: str = ""
     instagram_access_token: str = ""
 
+    # ---- ImgBB (hospedagem pública das imagens dos cards p/ Instagram) ----
+    imgbb_api_key: str = ""
+
+    # ---- Twitter/X (automação via navegador — não usa a API oficial) ----
+    twitter_username: str = ""
+    twitter_password: str = ""
+    twitter_enabled: bool = False
+
     # ---- Mercado Livre ----
     ml_client_id: str = ""
     ml_client_secret: str = ""

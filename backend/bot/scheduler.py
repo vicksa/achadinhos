@@ -10,7 +10,7 @@ Pipeline completo:
 3. Filtra por desconto mínimo
 4. Salva no banco de dados
 5. Gera card visual (Pillow)
-6. Publica no Telegram
+6. Publica no Telegram e, se habilitado, no Twitter/X
 """
 
 import asyncio
@@ -29,6 +29,7 @@ from core.models import Deal
 from bot.dedup import ja_foi_postado, marcar_postado
 from bot.card_generator import generate_deal_card
 from bot.telegram_publisher import publicar_no_telegram
+from bot.twitter_publisher import init_twitter, publicar_no_twitter, fechar_twitter
 from scrapers.pelando_scraper import coletar_ofertas_pelando
 from scrapers.promobit_scraper import coletar_ofertas_promobit
 
@@ -144,6 +145,7 @@ async def _salvar_deal_no_banco(deal_data: dict[str, Any]) -> Deal | None:
 async def _atualizar_status_publicacao(
     deal_id: Any,
     tg_message_id: int | None,
+    twitter_ok: bool = False,
 ) -> None:
     """
     Atualiza o status de publicação de um deal no banco.
@@ -151,6 +153,7 @@ async def _atualizar_status_publicacao(
     Args:
         deal_id: UUID do deal.
         tg_message_id: ID da mensagem no Telegram (ou None se falhou).
+        twitter_ok: True se o tweet foi publicado com sucesso.
     """
     try:
         async with AsyncSessionLocal() as session:
@@ -163,6 +166,9 @@ async def _atualizar_status_publicacao(
                     if tg_message_id:
                         deal.published_tg = True
                         deal.tg_message_id = tg_message_id
+                    if twitter_ok:
+                        deal.published_twitter = True
+                    if tg_message_id or twitter_ok:
                         deal.status = "published"
                     else:
                         deal.status = "pending"  # Mantém pendente para retry
@@ -232,6 +238,50 @@ async def executar_pipeline() -> None:
         return
 
     # ── Etapa 3: Processar cada oferta ───────────────────────────────
+    twitter_pronto = await init_twitter()
+    if settings.twitter_enabled and not twitter_pronto:
+        logger.warning(
+            "Twitter habilitado mas sessão não pôde ser iniciada — "
+            "publicações deste ciclo sairão só no Telegram."
+        )
+
+    try:
+        publicadas, erros = await _processar_ofertas(
+            ofertas_novas, twitter_pronto, settings
+        )
+    finally:
+        if twitter_pronto:
+            await fechar_twitter()
+
+    # ── Resumo ───────────────────────────────────────────────────────
+    duracao = (datetime.now(timezone.utc) - inicio).total_seconds()
+    logger.info(
+        "═══════════════════════════════════════════════════════\n"
+        "  📊 Pipeline finalizado em %.1fs\n"
+        "     Total coletadas: %d\n"
+        "     Novas (após filtro): %d\n"
+        "     Publicadas: %d\n"
+        "     Erros: %d\n"
+        "═══════════════════════════════════════════════════════",
+        duracao,
+        len(ofertas),
+        len(ofertas_novas),
+        publicadas,
+        erros,
+    )
+
+
+async def _processar_ofertas(
+    ofertas_novas: list[dict[str, Any]],
+    twitter_pronto: bool,
+    settings: Any,
+) -> tuple[int, int]:
+    """
+    Processa (salva, gera card e publica) cada oferta da lista.
+
+    Returns:
+        Tupla (quantidade publicada, quantidade com erro).
+    """
     publicadas = 0
     erros = 0
 
@@ -265,18 +315,28 @@ async def executar_pipeline() -> None:
             # 3c. Publicar no Telegram
             tg_msg_id = await publicar_no_telegram(oferta, card_bytes)
 
-            if tg_msg_id:
-                # 3d. Marcar como postada no Redis
+            # 3d. Publicar no Twitter/X (se habilitado e sessão pronta)
+            twitter_ok = False
+            if twitter_pronto:
+                twitter_ok = await publicar_no_twitter(oferta, card_bytes)
+
+            if tg_msg_id or twitter_ok:
+                # 3e. Marcar como postada no Redis
                 await marcar_postado(oferta["url"])
 
-                # 3e. Atualizar status no banco
+                # 3f. Atualizar status no banco
                 if deal_id:
-                    await _atualizar_status_publicacao(deal_id, tg_msg_id)
+                    await _atualizar_status_publicacao(deal_id, tg_msg_id, twitter_ok)
 
                 publicadas += 1
-                logger.info("✅ Oferta publicada com sucesso: %s", titulo)
+                logger.info(
+                    "✅ Oferta publicada com sucesso (telegram=%s, twitter=%s): %s",
+                    bool(tg_msg_id),
+                    twitter_ok,
+                    titulo,
+                )
 
-                # 3f. Cooldown entre posts (evitar rate limit)
+                # 3g. Cooldown entre posts (evitar rate limit)
                 if i < len(ofertas_novas):
                     logger.debug(
                         "Aguardando cooldown de %ds...",
@@ -299,22 +359,7 @@ async def executar_pipeline() -> None:
             )
             continue
 
-    # ── Resumo ───────────────────────────────────────────────────────
-    duracao = (datetime.now(timezone.utc) - inicio).total_seconds()
-    logger.info(
-        "═══════════════════════════════════════════════════════\n"
-        "  📊 Pipeline finalizado em %.1fs\n"
-        "     Total coletadas: %d\n"
-        "     Novas (após filtro): %d\n"
-        "     Publicadas: %d\n"
-        "     Erros: %d\n"
-        "═══════════════════════════════════════════════════════",
-        duracao,
-        len(ofertas),
-        len(ofertas_novas),
-        publicadas,
-        erros,
-    )
+    return publicadas, erros
 
 
 def criar_scheduler() -> AsyncIOScheduler:
