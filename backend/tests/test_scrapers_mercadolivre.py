@@ -4,8 +4,9 @@ import httpx
 import pytest
 import respx
 
-from scrapers import mercadolivre
+from scrapers import mercadolivre, resiliencia
 from scrapers.mercadolivre import (
+    FONTE,
     ML_SEARCH_URL,
     ML_TOKEN_URL,
     _normalizar_item,
@@ -19,6 +20,19 @@ def _resetar_cache_de_token():
     mercadolivre._token_cache = {"access_token": None, "expires_at": 0}
     yield
     mercadolivre._token_cache = {"access_token": None, "expires_at": 0}
+
+
+@pytest.fixture(autouse=True)
+def _resiliencia_sem_atrito(monkeypatch):
+    """Sem sleep real no retry, e circuit breaker limpo antes/depois de cada teste."""
+    resiliencia.circuit_breaker.resetar()
+
+    async def _sleep_instantaneo(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(resiliencia.asyncio, "sleep", _sleep_instantaneo)
+    yield
+    resiliencia.circuit_breaker.resetar()
 
 
 def _item_ml(**overrides) -> dict:
@@ -214,3 +228,37 @@ class TestBuscarMercadoLivre:
             await buscar_mercadolivre("produto")
 
         assert "Authorization" not in rota_busca.calls.last.request.headers
+
+
+class TestResiliencia:
+    async def test_falha_transiente_seguida_de_sucesso_e_recuperada_pelo_retry(self):
+        with respx.mock:
+            respx.get(ML_SEARCH_URL).mock(
+                side_effect=[
+                    httpx.Response(503),
+                    httpx.Response(200, json={"results": [_item_ml()]}),
+                ]
+            )
+            ofertas = await buscar_mercadolivre("produto")
+
+        assert len(ofertas) == 1
+
+    async def test_falhas_consecutivas_abrem_o_circuit_breaker(self):
+        with respx.mock:
+            respx.get(ML_SEARCH_URL).mock(return_value=httpx.Response(500))
+            for _ in range(resiliencia.circuit_breaker.limite_falhas):
+                await buscar_mercadolivre("produto")
+
+        assert resiliencia.circuit_breaker.permite_chamada(FONTE) is False
+
+    async def test_circuit_breaker_aberto_pula_a_busca(self):
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+
+        with respx.mock:
+            rota = respx.get(ML_SEARCH_URL).mock(return_value=httpx.Response(200))
+            ofertas = await buscar_mercadolivre("produto")
+
+        assert ofertas == []
+        assert rota.called is False

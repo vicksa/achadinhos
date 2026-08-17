@@ -6,7 +6,21 @@ import httpx
 import pytest
 import respx
 
-from scrapers.promobit_scraper import HOMEPAGE_URL, coletar_ofertas_promobit
+from scrapers import resiliencia
+from scrapers.promobit_scraper import FONTE, HOMEPAGE_URL, coletar_ofertas_promobit
+
+
+@pytest.fixture(autouse=True)
+def _resiliencia_sem_atrito(monkeypatch):
+    """Sem sleep real no retry, e circuit breaker limpo antes/depois de cada teste."""
+    resiliencia.circuit_breaker.resetar()
+
+    async def _sleep_instantaneo(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(resiliencia.asyncio, "sleep", _sleep_instantaneo)
+    yield
+    resiliencia.circuit_breaker.resetar()
 
 
 def _html_com_ofertas(offers: list[dict]) -> str:
@@ -158,3 +172,46 @@ class TestColetarOfertasPromobit:
             ofertas = await coletar_ofertas_promobit()
 
         assert len(ofertas) == 2
+
+
+class TestResiliencia:
+    async def test_falha_transiente_seguida_de_sucesso_e_recuperada_pelo_retry(self):
+        html = _html_com_ofertas([_oferta_bruta()])
+        with respx.mock:
+            respx.get(HOMEPAGE_URL).mock(
+                side_effect=[httpx.Response(503), httpx.Response(200, text=html)]
+            )
+            ofertas = await coletar_ofertas_promobit()
+
+        assert len(ofertas) == 1
+
+    async def test_falhas_consecutivas_abrem_o_circuit_breaker(self):
+        with respx.mock:
+            respx.get(HOMEPAGE_URL).mock(return_value=httpx.Response(500))
+            for _ in range(resiliencia.circuit_breaker.limite_falhas):
+                await coletar_ofertas_promobit()
+
+        assert resiliencia.circuit_breaker.permite_chamada(FONTE) is False
+
+    async def test_circuit_breaker_aberto_pula_a_requisicao(self):
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+
+        with respx.mock:
+            rota = respx.get(HOMEPAGE_URL).mock(return_value=httpx.Response(200))
+            ofertas = await coletar_ofertas_promobit()
+
+        assert ofertas == []
+        assert rota.called is False
+
+    async def test_sucesso_fecha_o_circuit_breaker(self):
+        html = _html_com_ofertas([_oferta_bruta()])
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+
+        with respx.mock:
+            respx.get(HOMEPAGE_URL).mock(return_value=httpx.Response(200, text=html))
+            await coletar_ofertas_promobit()
+
+        assert resiliencia.circuit_breaker.permite_chamada(FONTE) is True

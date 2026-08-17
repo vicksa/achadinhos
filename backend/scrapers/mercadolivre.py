@@ -17,10 +17,12 @@ import httpx
 
 from api.schemas import ProductOffer
 from core.config import get_settings
+from scrapers.resiliencia import circuit_breaker, retry_async
 
 logger = logging.getLogger(__name__)
 
 # ---- Constantes ----
+FONTE = "mercadolivre"
 ML_SEARCH_URL = "https://api.mercadolibre.com/sites/MLB/search"
 ML_TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
 ML_TIMEOUT = 15.0
@@ -103,6 +105,10 @@ async def buscar_mercadolivre(
     Returns:
         Lista de ProductOffer normalizados. Lista vazia em caso de erro.
     """
+    if not circuit_breaker.permite_chamada(FONTE):
+        logger.warning("Mercado Livre: circuit breaker aberto — pulando esta busca.")
+        return []
+
     limit = min(max(1, limit), ML_MAX_RESULTS)
 
     params: dict[str, Any] = {
@@ -119,18 +125,22 @@ async def buscar_mercadolivre(
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
-        async with httpx.AsyncClient(timeout=ML_TIMEOUT, headers=headers) as client:
-            response = await client.get(ML_SEARCH_URL, params=params)
+        async def _buscar() -> httpx.Response:
+            async with httpx.AsyncClient(timeout=ML_TIMEOUT, headers=headers) as client:
+                response = await client.get(ML_SEARCH_URL, params=params)
 
-            # Se 403 com token, tentar sem (fallback público)
-            if response.status_code == 403 and token:
-                logger.info("ML: token rejeitado, tentando fallback público...")
-                headers.pop("Authorization", None)
-                response = await client.get(
-                    ML_SEARCH_URL, params=params, headers=headers
-                )
+                # Se 403 com token, tentar sem (fallback público)
+                if response.status_code == 403 and token:
+                    logger.info("ML: token rejeitado, tentando fallback público...")
+                    headers.pop("Authorization", None)
+                    response = await client.get(
+                        ML_SEARCH_URL, params=params, headers=headers
+                    )
 
-            response.raise_for_status()
+                response.raise_for_status()
+                return response
+
+        response = await retry_async(_buscar, nome=f"Mercado Livre: buscar '{query}'")
 
         dados = response.json()
         resultados = dados.get("results", [])
@@ -148,6 +158,7 @@ async def buscar_mercadolivre(
             if oferta is not None:
                 ofertas.append(oferta)
 
+        circuit_breaker.registrar_sucesso(FONTE)
         return ofertas
 
     except httpx.TimeoutException:
@@ -156,6 +167,7 @@ async def buscar_mercadolivre(
             query,
             ML_TIMEOUT,
         )
+        circuit_breaker.registrar_falha(FONTE)
         return []
 
     except httpx.HTTPStatusError as exc:
@@ -165,6 +177,7 @@ async def buscar_mercadolivre(
             query,
             exc.response.text[:200],
         )
+        circuit_breaker.registrar_falha(FONTE)
         return []
 
     except httpx.RequestError as exc:
@@ -173,9 +186,12 @@ async def buscar_mercadolivre(
             query,
             str(exc),
         )
+        circuit_breaker.registrar_falha(FONTE)
         return []
 
     except Exception:
+        # Erro de parsing/bug interno — não é falha de disponibilidade da
+        # fonte, então não conta para o circuit breaker.
         logger.exception("Mercado Livre: erro inesperado ao buscar '%s'", query)
         return []
 

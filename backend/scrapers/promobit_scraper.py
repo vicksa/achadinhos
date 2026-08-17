@@ -22,11 +22,13 @@ from typing import Any
 
 import httpx
 
+from scrapers.resiliencia import circuit_breaker, retry_async
 from scrapers.utils import calcular_quality_score
 
 logger = logging.getLogger(__name__)
 
 # ── Configuração ─────────────────────────────────────────────────────
+FONTE = "promobit"
 HOMEPAGE_URL = "https://www.promobit.com.br/"
 LIMITE_PADRAO = 15
 _HTTP_TIMEOUT = 15.0
@@ -116,17 +118,31 @@ async def coletar_ofertas_promobit(limit: int = LIMITE_PADRAO) -> list[dict[str,
         Lista de dicionários de ofertas normalizadas. Lista vazia em
         caso de erro (rede, HTML alterado, etc.) — resiliente.
     """
+    if not circuit_breaker.permite_chamada(FONTE):
+        logger.warning(
+            "Promobit: circuit breaker aberto (falhas recentes) — pulando esta coleta."
+        )
+        return []
+
     try:
         async with httpx.AsyncClient(
             timeout=_HTTP_TIMEOUT,
             follow_redirects=True,
             headers=_HEADERS,
         ) as client:
-            resp = await client.get(HOMEPAGE_URL)
-            resp.raise_for_status()
+
+            async def _buscar_homepage() -> httpx.Response:
+                resp = await client.get(HOMEPAGE_URL)
+                resp.raise_for_status()
+                return resp
+
+            resp = await retry_async(_buscar_homepage, nome="Promobit: buscar homepage")
     except httpx.HTTPError as exc:
         logger.error("Promobit: falha ao buscar homepage: %s", exc)
+        circuit_breaker.registrar_falha(FONTE)
         return []
+
+    circuit_breaker.registrar_sucesso(FONTE)
 
     match = _PADRAO_NEXT_DATA.search(resp.text)
     if not match:

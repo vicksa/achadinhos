@@ -26,11 +26,13 @@ from typing import Any
 
 import httpx
 
+from scrapers.resiliencia import circuit_breaker, retry_async
 from scrapers.utils import calcular_quality_score, limpar_html
 
 logger = logging.getLogger(__name__)
 
 # ── Configuração ─────────────────────────────────────────────────────
+FONTE = "pelando"
 LISTAGEM_URL = "https://www.pelando.com.br/mais-quentes"
 LIMITE_PADRAO = 12
 _HTTP_TIMEOUT = 15.0
@@ -85,7 +87,7 @@ def _unwrap(valor: Any) -> Any:
 
 async def _listar_links_ofertas(
     client: httpx.AsyncClient, limit: int
-) -> list[str]:
+) -> list[str] | None:
     """
     Busca a página de ofertas "mais quentes" e extrai os links
     permanentes de cada card (https://www.pelando.com.br/d/...).
@@ -95,14 +97,20 @@ async def _listar_links_ofertas(
         limit: Número máximo de links a retornar.
 
     Returns:
-        Lista de URLs de ofertas (sem duplicatas, na ordem da página).
+        Lista de URLs de ofertas (sem duplicatas, na ordem da página), ou
+        None especificamente se a requisição falhou (distinto de uma
+        lista vazia, que significa "carregou mas não achou nenhum card").
     """
     try:
-        resp = await client.get(LISTAGEM_URL)
-        resp.raise_for_status()
+        async def _buscar() -> httpx.Response:
+            resp = await client.get(LISTAGEM_URL)
+            resp.raise_for_status()
+            return resp
+
+        resp = await retry_async(_buscar, nome="Pelando: buscar listagem")
     except httpx.HTTPError as exc:
         logger.error("Pelando: falha ao buscar listagem (%s): %s", LISTAGEM_URL, exc)
-        return []
+        return None
 
     html = resp.text
     links: list[str] = []
@@ -140,8 +148,14 @@ async def _buscar_detalhe_oferta(
         se a oferta não puder ser processada.
     """
     try:
-        resp = await client.get(url)
-        resp.raise_for_status()
+        async def _buscar() -> httpx.Response:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp
+
+        # Retry mais enxuto que o da listagem — é uma página individual,
+        # não vale a pena gastar muito tempo numa oferta só.
+        resp = await retry_async(_buscar, tentativas=2, nome=f"Pelando: buscar detalhe de {url}")
     except httpx.HTTPError as exc:
         logger.warning("Pelando: falha ao buscar detalhe de %s: %s", url, exc)
         return None
@@ -214,6 +228,12 @@ async def coletar_ofertas_pelando(limit: int = LIMITE_PADRAO) -> list[dict[str, 
     Returns:
         Lista de dicionários de ofertas normalizadas.
     """
+    if not circuit_breaker.permite_chamada(FONTE):
+        logger.warning(
+            "Pelando: circuit breaker aberto (falhas recentes) — pulando esta coleta."
+        )
+        return []
+
     ofertas: list[dict[str, Any]] = []
 
     async with httpx.AsyncClient(
@@ -222,6 +242,11 @@ async def coletar_ofertas_pelando(limit: int = LIMITE_PADRAO) -> list[dict[str, 
         headers=_HEADERS,
     ) as client:
         links = await _listar_links_ofertas(client, limit)
+        if links is None:
+            circuit_breaker.registrar_falha(FONTE)
+            return []
+
+        circuit_breaker.registrar_sucesso(FONTE)
         if not links:
             return []
 

@@ -6,18 +6,25 @@ import httpx
 import pytest
 import respx
 
-from scrapers import pelando_scraper
-from scrapers.pelando_scraper import LISTAGEM_URL, coletar_ofertas_pelando
+from scrapers import pelando_scraper, resiliencia
+from scrapers.pelando_scraper import FONTE, LISTAGEM_URL, coletar_ofertas_pelando
 
 
 @pytest.fixture(autouse=True)
 def _sem_delay_entre_requests(monkeypatch):
-    """Evita esperar o delay real (0.5s) entre requisições de detalhe nos testes."""
+    """
+    Evita esperar delays reais nos testes: o de 0.5s entre requisições de
+    detalhe, e o backoff do retry_async (mesmo módulo `asyncio` para os
+    dois, então um único patch cobre ambos).
+    """
 
     async def _sleep_instantaneo(*_args, **_kwargs):
         return None
 
     monkeypatch.setattr(pelando_scraper.asyncio, "sleep", _sleep_instantaneo)
+    resiliencia.circuit_breaker.resetar()
+    yield
+    resiliencia.circuit_breaker.resetar()
 
 
 def _wrap(valor):
@@ -231,3 +238,61 @@ class TestColetarOfertasPelando:
             ofertas = await coletar_ofertas_pelando(limit=10)
 
         assert len(ofertas) == 1
+
+
+class TestResiliencia:
+    async def test_listagem_com_falha_transiente_e_recuperada_pelo_retry(self):
+        link = "https://www.pelando.com.br/d/produto-recuperado"
+
+        with respx.mock:
+            respx.get(LISTAGEM_URL).mock(
+                side_effect=[
+                    httpx.Response(503),
+                    httpx.Response(200, text=_listagem_html([link])),
+                ]
+            )
+            respx.get(link).mock(
+                return_value=httpx.Response(200, text=_detalhe_html(_deal_base()))
+            )
+
+            ofertas = await coletar_ofertas_pelando()
+
+        assert len(ofertas) == 1
+
+    async def test_detalhe_com_falha_transiente_e_recuperado_pelo_retry(self):
+        link = "https://www.pelando.com.br/d/produto-detalhe-instavel"
+
+        with respx.mock:
+            respx.get(LISTAGEM_URL).mock(
+                return_value=httpx.Response(200, text=_listagem_html([link]))
+            )
+            respx.get(link).mock(
+                side_effect=[
+                    httpx.TimeoutException("timeout"),
+                    httpx.Response(200, text=_detalhe_html(_deal_base())),
+                ]
+            )
+
+            ofertas = await coletar_ofertas_pelando()
+
+        assert len(ofertas) == 1
+
+    async def test_listagem_falhando_repetidamente_abre_circuit_breaker(self):
+        with respx.mock:
+            respx.get(LISTAGEM_URL).mock(return_value=httpx.Response(500))
+            for _ in range(resiliencia.circuit_breaker.limite_falhas):
+                await coletar_ofertas_pelando()
+
+        assert resiliencia.circuit_breaker.permite_chamada(FONTE) is False
+
+    async def test_circuit_breaker_aberto_pula_a_coleta(self):
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+        resiliencia.circuit_breaker.registrar_falha(FONTE)
+
+        with respx.mock:
+            rota = respx.get(LISTAGEM_URL).mock(return_value=httpx.Response(200))
+            ofertas = await coletar_ofertas_pelando()
+
+        assert ofertas == []
+        assert rota.called is False
