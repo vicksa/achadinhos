@@ -26,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from scrapers.base import DealScraper
 from scrapers.resiliencia import circuit_breaker, retry_async
 from scrapers.utils import calcular_quality_score, limpar_html
 
@@ -268,3 +269,12 @@ async def coletar_ofertas_pelando(limit: int = LIMITE_PADRAO) -> list[dict[str, 
 
     logger.info("Pelando: %d ofertas coletadas com sucesso.", len(ofertas))
     return ofertas
+
+
+class PelandoScraper(DealScraper):
+    """Implementação de `DealScraper` para o Pelando (ver `scrapers/base.py`)."""
+
+    nome = FONTE
+
+    async def fetch(self, limit: int = LIMITE_PADRAO) -> list[dict[str, Any]]:
+        return await coletar_ofertas_pelando(limit=limit)

@@ -176,11 +176,22 @@ def mocks_publicacao(monkeypatch):
 
     m = Mocks()
 
-    async def _fake_pelando():
-        return m.pelando
+    class _FakeScraper:
+        def __init__(self, nome, obter_ofertas):
+            self.nome = nome
+            self._obter_ofertas = obter_ofertas
 
-    async def _fake_promobit():
-        return m.promobit
+        async def fetch(self, limit=12):
+            return self._obter_ofertas()
+
+    monkeypatch.setattr(
+        scheduler,
+        "SCRAPERS",
+        [
+            _FakeScraper("pelando", lambda: m.pelando),
+            _FakeScraper("promobit", lambda: m.promobit),
+        ],
+    )
 
     async def _fake_telegram(oferta, _card):
         m.chamadas_telegram.append(oferta["url"])
@@ -193,8 +204,6 @@ def mocks_publicacao(monkeypatch):
     async def _fake_init_twitter():
         return scheduler_settings_atual.twitter_enabled
 
-    monkeypatch.setattr(scheduler, "coletar_ofertas_pelando", _fake_pelando)
-    monkeypatch.setattr(scheduler, "coletar_ofertas_promobit", _fake_promobit)
     monkeypatch.setattr(scheduler, "publicar_no_telegram", _fake_telegram)
     monkeypatch.setattr(scheduler, "publicar_no_twitter", _fake_twitter)
     monkeypatch.setattr(scheduler, "init_twitter", _fake_init_twitter)
@@ -243,10 +252,13 @@ class TestExecutarPipeline:
         assert mocks_publicacao.chamadas_telegram == []
 
     async def test_uma_fonte_falhando_nao_impede_a_outra(self, mocks_publicacao, monkeypatch):
-        async def _fonte_com_erro():
-            raise RuntimeError("Pelando fora do ar")
+        class _ScraperComErro:
+            nome = "pelando"
 
-        monkeypatch.setattr(scheduler, "coletar_ofertas_pelando", _fonte_com_erro)
+            async def fetch(self, limit=12):
+                raise RuntimeError("Pelando fora do ar")
+
+        scheduler.SCRAPERS[0] = _ScraperComErro()
         mocks_publicacao.promobit = [_oferta(url="https://exemplo.com/produto-resiliente")]
 
         await scheduler.executar_pipeline()

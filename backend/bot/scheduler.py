@@ -5,7 +5,7 @@ Usa APScheduler (AsyncIOScheduler) para executar o pipeline
 de coleta e publicação de ofertas em intervalos configuráveis.
 
 Pipeline completo:
-1. Coleta ofertas (Pelando + Promobit, em paralelo)
+1. Coleta ofertas de todas as fontes em SCRAPERS (em paralelo)
 2. Filtra duplicatas (Redis dedup)
 3. Filtra por desconto mínimo
 4. Salva no banco de dados
@@ -30,13 +30,18 @@ from bot.dedup import ja_foi_postado, marcar_heartbeat, marcar_postado
 from bot.card_generator import generate_deal_card
 from bot.telegram_publisher import publicar_no_telegram
 from bot.twitter_publisher import init_twitter, publicar_no_twitter, fechar_twitter
-from scrapers.pelando_scraper import coletar_ofertas_pelando
-from scrapers.promobit_scraper import coletar_ofertas_promobit
+from scrapers.base import DealScraper
+from scrapers.pelando_scraper import PelandoScraper
+from scrapers.promobit_scraper import PromobitScraper
 
 logger = logging.getLogger(__name__)
 
 # Scheduler global
 _scheduler: AsyncIOScheduler | None = None
+
+# Fontes de ofertas do pipeline — adicionar uma nova fonte é só implementar
+# `DealScraper` (ver scrapers/base.py) e incluir a instância aqui.
+SCRAPERS: list[DealScraper] = [PelandoScraper(), PromobitScraper()]
 
 
 async def _filtrar_ofertas_novas(
@@ -214,17 +219,17 @@ async def executar_pipeline() -> None:
     await marcar_heartbeat(ttl_segundos=settings.deal_check_interval_minutes * 60 * 3)
 
     # ── Etapa 1: Coletar ofertas de todas as fontes em paralelo ──────
+    # (cada scraper usa seu próprio limite padrão)
     resultados = await asyncio.gather(
-        coletar_ofertas_pelando(),
-        coletar_ofertas_promobit(),
+        *(scraper.fetch() for scraper in SCRAPERS),
         return_exceptions=True,
     )
 
     ofertas: list[dict[str, Any]] = []
-    for fonte, resultado in zip(("pelando", "promobit"), resultados):
+    for scraper, resultado in zip(SCRAPERS, resultados):
         if isinstance(resultado, Exception):
             logger.error(
-                "Falha crítica na coleta de %s: %s", fonte, resultado, exc_info=True
+                "Falha crítica na coleta de %s: %s", scraper.nome, resultado, exc_info=True
             )
             continue
         ofertas.extend(resultado)

@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 
+from scrapers.base import DealScraper
 from scrapers.resiliencia import circuit_breaker, retry_async
 from scrapers.utils import calcular_quality_score
 
@@ -179,3 +180,12 @@ async def coletar_ofertas_promobit(limit: int = LIMITE_PADRAO) -> list[dict[str,
 
     logger.info("Promobit: %d ofertas coletadas com sucesso.", len(ofertas))
     return ofertas
+
+
+class PromobitScraper(DealScraper):
+    """Implementação de `DealScraper` para o Promobit (ver `scrapers/base.py`)."""
+
+    nome = FONTE
+
+    async def fetch(self, limit: int = LIMITE_PADRAO) -> list[dict[str, Any]]:
+        return await coletar_ofertas_promobit(limit=limit)
