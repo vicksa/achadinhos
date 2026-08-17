@@ -26,40 +26,24 @@ import sys
 from datetime import datetime, timezone
 
 from core.config import get_settings
+from core.logging_config import configurar_logging
 
 logger = logging.getLogger("achadinhos")
 
 
 def _configurar_logging() -> None:
     """
-    Configura o sistema de logging com formato estruturado.
+    Configura o sistema de logging (texto legível ou JSON estruturado).
 
-    Usa o nível de log definido nas configurações (LOG_LEVEL).
+    Usa o nível e formato definidos nas configurações (LOG_LEVEL, LOG_FORMAT).
     """
     settings = get_settings()
-
-    formato = (
-        "%(asctime)s │ %(levelname)-8s │ %(name)-25s │ %(message)s"
+    configurar_logging(nivel=settings.log_level, formato=settings.log_format)
+    logger.info(
+        "Logging configurado (nível: %s, formato: %s).",
+        settings.log_level,
+        settings.log_format,
     )
-    data_formato = "%Y-%m-%d %H:%M:%S"
-
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper(), logging.INFO),
-        format=formato,
-        datefmt=data_formato,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-
-    # Reduzir verbosidade de libs externas
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("apscheduler").setLevel(logging.INFO)
-    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-    logging.getLogger("telegram").setLevel(logging.WARNING)
-
-    logger.info("Logging configurado (nível: %s).", settings.log_level)
 
 
 async def _inicializar_redis() -> None:

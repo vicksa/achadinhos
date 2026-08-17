@@ -43,6 +43,24 @@ class TestLifespan:
         async with lifespan(app):
             pass  # não deve lançar
 
+    async def test_em_producao_nao_chama_init_db(self, monkeypatch):
+        chamado = {"vezes": 0}
+
+        async def _init_db_espiao():
+            chamado["vezes"] += 1
+
+        class FakeSettings:
+            redis_url = "redis://localhost:6379/1"
+            environment = "production"
+
+        monkeypatch.setattr(main_module, "get_settings", lambda: FakeSettings())
+        monkeypatch.setattr(main_module, "init_db", _init_db_espiao)
+
+        async with lifespan(app):
+            pass
+
+        assert chamado["vezes"] == 0
+
 
 @pytest.fixture
 def client():
@@ -90,3 +108,89 @@ class TestEndpointsRaiz:
         corpo = resp.json()
         assert corpo["services"]["redis"] == "disconnected"
         assert corpo["status"] == "degraded"
+
+    async def test_health_inclui_status_do_banco(self, client):
+        async with client as c:
+            resp = await c.get("/health")
+
+        assert resp.json()["services"]["database"] == "connected"
+
+    async def test_checar_banco_real_reporta_disconnected_numa_falha_real(self, monkeypatch):
+        class EngineQuebrada:
+            def connect(self):
+                raise ConnectionError("banco fora do ar")
+
+        monkeypatch.setattr(main_module, "engine", EngineQuebrada())
+        assert await main_module._checar_banco() == "disconnected"
+
+    async def test_health_banco_indisponivel_fica_degraded(self, client, monkeypatch):
+        async def _checar_banco_falho():
+            return "disconnected"
+
+        monkeypatch.setattr(main_module, "_checar_banco", _checar_banco_falho)
+
+        async with client as c:
+            resp = await c.get("/health")
+
+        corpo = resp.json()
+        assert corpo["services"]["database"] == "disconnected"
+        assert corpo["status"] == "degraded"
+
+    async def test_health_bot_sem_heartbeat_fica_unknown(self, client):
+        async with client as c:
+            resp = await c.get("/health")
+
+        # sem Redis conectado (lifespan não rodou), heartbeat não dá pra checar
+        assert resp.json()["services"]["bot"] == "unknown"
+
+    async def test_health_bot_com_heartbeat_fica_ok(self, client):
+        from bot import dedup
+
+        async with lifespan(app):
+            redis_bot = await dedup.init_redis()
+            await dedup.marcar_heartbeat(ttl_segundos=60)
+            async with client as c:
+                resp = await c.get("/health")
+            await redis_bot.delete(dedup.HEARTBEAT_KEY)
+            await dedup.fechar_redis()
+
+        assert resp.json()["services"]["bot"] == "ok"
+
+
+class TestReady:
+    async def test_pronto_quando_banco_disponivel(self, client):
+        async with client as c:
+            resp = await c.get("/ready")
+
+        corpo = resp.json()
+        assert resp.status_code == 200
+        assert corpo["ready"] is True
+        assert corpo["database"] == "connected"
+
+    async def test_nao_pronto_quando_banco_indisponivel(self, client, monkeypatch):
+        async def _checar_banco_falho():
+            return "disconnected"
+
+        monkeypatch.setattr(main_module, "_checar_banco", _checar_banco_falho)
+
+        async with client as c:
+            resp = await c.get("/ready")
+
+        corpo = resp.json()
+        assert resp.status_code == 503
+        assert corpo["ready"] is False
+
+    async def test_nao_pronto_ignora_redis_indisponivel(self, client, monkeypatch):
+        """Redis é opcional (só cache) — não deve tirar a API de circulação."""
+
+        class FakePool:
+            async def ping(self):
+                raise ConnectionError("caiu")
+
+        monkeypatch.setattr(main_module, "_redis_pool", FakePool())
+
+        async with client as c:
+            resp = await c.get("/ready")
+
+        assert resp.status_code == 200
+        assert resp.json()["ready"] is True

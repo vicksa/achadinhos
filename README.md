@@ -113,6 +113,32 @@ lugar acessível (ex: `docker compose up -d postgres redis`).
 | `DEAL_MIN_DISCOUNT_PCT` | Desconto mínimo (%) pra postar (padrão: 15%). Ofertas sem desconto detectado passam mesmo assim — a ideia é "barato OU com desconto" |
 | `DEAL_DEDUP_TTL_DAYS` | Por quantos dias uma URL já postada é considerada duplicata (padrão: 7) |
 | `TELEGRAM_POST_COOLDOWN_SECONDS` | Espera entre posts consecutivos pra não tomar rate limit do Telegram (padrão: 120s) |
+| `LOG_FORMAT` | `texto` (legível, padrão) ou `json` (uma linha JSON por log — use em produção com um agregador de logs) |
+
+## Resiliência e observabilidade
+
+- **Retry com backoff**: os três scrapers (Pelando, Promobit, Mercado
+  Livre) tentam de novo automaticamente em falhas transientes (timeout,
+  erro de conexão, HTTP 5xx) — erros 4xx não são repetidos, já que
+  tentar de novo não resolveria. Ver `backend/scrapers/resiliencia.py`.
+- **Circuit breaker por fonte**: se uma fonte falhar 3 vezes seguidas
+  (mesmo com retry), o circuito "abre" e o scraper para de tentar por
+  15 minutos, evitando martelar um site fora do ar a cada ciclo do
+  pipeline (a cada 5 min por padrão). Depois do cooldown, tenta de novo
+  automaticamente.
+- **Logging estruturado**: `LOG_FORMAT=json` faz cada linha de log virar
+  um objeto JSON (com quaisquer campos extras passados via
+  `logger.info(..., extra={...})`), pronto pra um agregador de logs.
+- **Health checks**:
+  - `GET /health` — status de cada dependência (Postgres, Redis, e se o
+    bot está reportando heartbeat), sempre responde 200 (é informativo).
+  - `GET /ready` — pensado pra orquestradores: responde 503 se o banco
+    (dependência essencial) estiver indisponível.
+  - O bot não expõe porta HTTP própria — ele grava um heartbeat no Redis
+    a cada ciclo do pipeline, que o `/health` da API consulta pra saber
+    se o bot ainda está vivo.
+  - `docker-compose.yml` já define `healthcheck` pra `api` e `bot`
+    (visível em `docker compose ps`).
 
 ## Limitações conhecidas
 

@@ -121,3 +121,26 @@ class TestDedupComErroDeRedis:
     async def test_marcar_postado_com_erro_no_redis_nao_lanca(self, monkeypatch):
         monkeypatch.setattr(dedup, "_redis_client", self._ClienteQuebrado())
         await dedup.marcar_postado("https://exemplo.com/produto")  # não deve lançar
+
+
+class TestMarcarHeartbeat:
+    async def test_grava_chave_com_ttl(self, redis_de_teste):
+        await dedup.marcar_heartbeat(ttl_segundos=60)
+
+        valor = await redis_de_teste.get(dedup.HEARTBEAT_KEY)
+        assert valor is not None
+
+        ttl = await redis_de_teste.ttl(dedup.HEARTBEAT_KEY)
+        assert 0 < ttl <= 60
+
+    async def test_sem_redis_inicializado_nao_lanca(self, monkeypatch):
+        monkeypatch.setattr(dedup, "_redis_client", None)
+        await dedup.marcar_heartbeat(ttl_segundos=60)  # não deve lançar
+
+    async def test_erro_no_redis_nao_lanca(self, monkeypatch):
+        class _ClienteQuebrado:
+            async def set(self, *_a, **_kw):
+                raise redis.RedisError("conexão caiu")
+
+        monkeypatch.setattr(dedup, "_redis_client", _ClienteQuebrado())
+        await dedup.marcar_heartbeat(ttl_segundos=60)  # não deve lançar

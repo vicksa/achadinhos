@@ -3,10 +3,15 @@ Módulo de deduplicação baseado em Redis.
 
 Usa hash MD5 da URL (sem query params) para evitar republicação
 de ofertas já postadas dentro do período de TTL configurável.
+
+Também é o dono da conexão Redis do bot, então é onde mora o heartbeat
+usado pelo `/health` da API pra saber se o bot ainda está vivo (ver
+`marcar_heartbeat`) — o bot não expõe porta HTTP própria.
 """
 
 import hashlib
 import logging
+from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
 
 import redis.asyncio as redis
@@ -17,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Prefixo para as chaves no Redis
 _REDIS_PREFIX = "achadinhos:dedup:"
+
+# Chave do heartbeat do bot — checada pelo endpoint /health da API.
+HEARTBEAT_KEY = "achadinhos:bot:last_run"
 
 # Conexão global (inicializada via init_redis)
 _redis_client: redis.Redis | None = None
@@ -160,3 +168,28 @@ async def marcar_postado(url: str) -> None:
         )
     except redis.RedisError as exc:
         logger.error("Erro ao marcar URL como postada no Redis: %s", exc)
+
+
+async def marcar_heartbeat(ttl_segundos: int) -> None:
+    """
+    Grava no Redis que o bot completou (ou tentou completar) um ciclo do
+    pipeline agora, com expiração automática.
+
+    Como a chave expira sozinha, o `/health` da API não precisa comparar
+    timestamps — só checa se a chave ainda existe: se existir, o bot
+    rodou dentro da janela esperada; se sumiu, o bot parou de reportar.
+
+    Args:
+        ttl_segundos: Por quantos segundos a chave deve durar — use uma
+            folga sobre o intervalo do pipeline (ex: 2x ou 3x), pra não
+            marcar "unknown" só por uma execução ter demorado um pouco
+            mais que o normal.
+    """
+    if _redis_client is None:
+        return
+
+    try:
+        agora = datetime.now(timezone.utc).isoformat()
+        await _redis_client.set(name=HEARTBEAT_KEY, value=agora, ex=ttl_segundos)
+    except redis.RedisError as exc:
+        logger.error("Erro ao gravar heartbeat do bot no Redis: %s", exc)

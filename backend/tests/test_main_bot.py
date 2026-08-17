@@ -21,6 +21,7 @@ from bot import dedup
 class FakeSettings:
     def __init__(self, **overrides):
         self.log_level = "INFO"
+        self.log_format = "texto"
         self.__dict__.update(overrides)
 
 

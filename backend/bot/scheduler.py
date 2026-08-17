@@ -26,7 +26,7 @@ from core.config import get_settings
 from core.database import AsyncSessionLocal
 from core.models import Deal
 
-from bot.dedup import ja_foi_postado, marcar_postado
+from bot.dedup import ja_foi_postado, marcar_heartbeat, marcar_postado
 from bot.card_generator import generate_deal_card
 from bot.telegram_publisher import publicar_no_telegram
 from bot.twitter_publisher import init_twitter, publicar_no_twitter, fechar_twitter
@@ -207,6 +207,11 @@ async def executar_pipeline() -> None:
         "═══════════════════════════════════════════════════════"
     )
     inicio = datetime.now(timezone.utc)
+
+    # Heartbeat logo no início — mesmo que a coleta falhe adiante, isso já
+    # prova que o processo do bot está vivo e o scheduler está disparando
+    # os ciclos (checado pelo endpoint /health da API).
+    await marcar_heartbeat(ttl_segundos=settings.deal_check_interval_minutes * 60 * 3)
 
     # ── Etapa 1: Coletar ofertas de todas as fontes em paralelo ──────
     resultados = await asyncio.gather(

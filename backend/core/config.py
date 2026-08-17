@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # ---- Ambiente ----
     environment: str = "development"
     log_level: str = "INFO"
+    log_format: str = "texto"  # "texto" (legível, dev) ou "json" (estruturado, produção)
 
     # ---- PostgreSQL ----
     database_url: str = "postgresql+asyncpg://root:password@localhost:5432/achadinhos"

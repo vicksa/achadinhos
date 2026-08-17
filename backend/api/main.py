@@ -14,20 +14,19 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from api.deals import router as deals_router
 from api.search import router as search_router
 from core.config import get_settings
-from core.database import init_db
+from core.database import engine, init_db
+from core.logging_config import configurar_logging
 
 # ---- Logging ----
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s — %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+_settings_iniciais = get_settings()
+configurar_logging(nivel=_settings_iniciais.log_level, formato=_settings_iniciais.log_format)
 logger = logging.getLogger(__name__)
 
 # ---- Pool Redis global (acessado pelo router de busca) ----
@@ -162,42 +161,107 @@ async def raiz():
     }
 
 
+async def _checar_redis() -> str:
+    """Retorna 'connected', 'disconnected' ou 'not_configured'."""
+    if _redis_pool is None:
+        return "not_configured"
+    try:
+        await _redis_pool.ping()
+        return "connected"
+    except Exception:
+        return "disconnected"
+
+
+async def _checar_banco() -> str:
+    """Retorna 'connected' ou 'disconnected'."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return "connected"
+    except Exception:
+        return "disconnected"
+
+
+async def _checar_bot_heartbeat() -> str:
+    """
+    Retorna 'ok' ou 'unknown' (nunca reportou / parou de reportar / Redis
+    indisponível).
+
+    O bot grava a chave `HEARTBEAT_KEY` no Redis a cada ciclo do pipeline
+    (ver bot/dedup.py e bot/scheduler.py), com TTL de ~2x o intervalo do
+    pipeline — isso permite monitorar de fora se ele ainda está vivo, sem
+    expor uma porta HTTP no processo do bot. O TTL expira sozinho se o
+    bot parar, então "unknown" cobre tanto "nunca rodou" quanto "travou".
+    """
+    if _redis_pool is None:
+        return "unknown"
+    try:
+        from bot.dedup import HEARTBEAT_KEY
+
+        valor = await _redis_pool.get(HEARTBEAT_KEY)
+        return "ok" if valor is not None else "unknown"
+    except Exception:
+        return "unknown"
+
+
 @app.get(
     "/health",
     tags=["Info"],
     summary="Health check",
-    description="Verifica o status da API e de suas dependências (Redis, DB).",
+    description="Verifica o status da API e de suas dependências (Redis, DB, bot).",
 )
 async def health_check():
     """
-    Endpoint de health check para monitoramento e load balancers.
+    Endpoint de health check (liveness) para monitoramento e load balancers.
 
-    Verifica:
-        - Status geral da API
-        - Conexão com Redis
-        - Timestamp atual
-
-    Returns:
-        Dicionário com status de cada componente.
+    Diferente de `/ready`, sempre responde 200 — o objetivo aqui é
+    reportar o status de cada componente, não decidir se a API deve
+    receber tráfego (isso é papel do `/ready`).
     """
-    status_info = {
-        "status": "healthy",
+    redis_status = await _checar_redis()
+    db_status = await _checar_banco()
+    bot_status = await _checar_bot_heartbeat()
+
+    degradado = redis_status != "connected" or db_status != "connected"
+
+    return {
+        "status": "degraded" if degradado else "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "1.0.0",
-        "services": {},
+        "services": {
+            "redis": redis_status,
+            "database": db_status,
+            "bot": bot_status,
+        },
     }
 
-    # Verificar Redis
-    global _redis_pool
-    if _redis_pool is not None:
-        try:
-            await _redis_pool.ping()
-            status_info["services"]["redis"] = "connected"
-        except Exception:
-            status_info["services"]["redis"] = "disconnected"
-            status_info["status"] = "degraded"
-    else:
-        status_info["services"]["redis"] = "not_configured"
-        status_info["status"] = "degraded"
 
-    return status_info
+@app.get(
+    "/ready",
+    tags=["Info"],
+    summary="Readiness check",
+    description=(
+        "Indica se a API está pronta para receber tráfego — responde 503 "
+        "se uma dependência essencial (banco de dados) estiver indisponível."
+    ),
+)
+async def readiness_check(response: Response):
+    """
+    Endpoint de readiness, no sentido usado por orquestradores (ex:
+    Kubernetes): diferente de `/health`, aqui uma dependência essencial
+    fora do ar deve tirar a instância de circulação (503), não só
+    reportar como "degraded".
+
+    O banco é considerado essencial (os endpoints de achadinhos dependem
+    dele). O Redis não é — a API funciona sem cache, só mais lenta.
+    """
+    db_status = await _checar_banco()
+    pronto = db_status == "connected"
+
+    if not pronto:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "ready": pronto,
+        "database": db_status,
+    }
