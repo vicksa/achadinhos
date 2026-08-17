@@ -152,11 +152,7 @@ async def marcar_postado(url: str) -> None:
     ttl_segundos = settings.deal_dedup_ttl_days * 86400  # dias → segundos
 
     try:
-        await _redis_client.setex(
-            name=chave,
-            time=ttl_segundos,
-            value="1",
-        )
+        await _redis_client.set(name=chave, value="1", ex=ttl_segundos)
         logger.debug(
             "URL marcada como postada (TTL=%dd): %s",
             settings.deal_dedup_ttl_days,

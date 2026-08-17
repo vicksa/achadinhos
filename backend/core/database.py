@@ -36,19 +36,6 @@ class Base(DeclarativeBase):
     pass
 
 
-async def get_db() -> AsyncSession:
-    """Dependency injection para FastAPI — fornece sessão do banco."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
-
-
 async def init_db():
     """Cria todas as tabelas no banco (usar apenas em dev/testes)."""
     async with engine.begin() as conn:

@@ -169,6 +169,35 @@ necessário fazer o primeiro login manualmente numa sessão de navegador
 comum, salvar os cookies como `backend/data/twitter_state.json`, e a
 automação reaproveita dali em diante.
 
+## Testes
+
+O backend tem uma suíte de mais de 200 testes automatizados (pytest),
+cobrindo scrapers, dedup, pipeline, publishers e API — **87% de cobertura
+de linhas**, com as partes críticas (scheduler, publishers, API de
+achadinhos, models) em 100%. Ver `backend/tests/`.
+
+Requer um Postgres de testes (isolado do banco real) e um Redis (usa o DB 1
+por padrão, também isolado do DB 0 usado em produção):
+
+```bash
+docker exec achadinhos-db psql -U root -d postgres -c "CREATE DATABASE achadinhos_test;"
+```
+
+Rodar:
+
+```bash
+cd backend
+source venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+pytest                                    # roda tudo
+pytest --cov --cov-report=term-missing    # com relatório de cobertura
+pytest tests/test_scheduler.py -v         # só um arquivo
+```
+
+Não são testados de propósito (documentado no topo de cada arquivo):
+- `bot/main_bot.py::_main`/`main` — laço de espera de sinal de SO (SIGINT/SIGTERM), baixo valor pra automatizar.
+- `bot/twitter_publisher.py` — a automação de navegador em si (login, clique, upload); só as funções puras de formatação de texto são testadas. Testar a interação real com o DOM do X pertenceria a uma suíte end-to-end separada.
+
 ## Estrutura do projeto
 
 ```
@@ -177,9 +206,10 @@ achadinhos/
 ├── .env.example
 ├── backend/
 │   ├── core/                # config, database, models (SQLAlchemy)
-│   ├── bot/                 # pipeline: scheduler, dedup, card, telegram
+│   ├── bot/                 # pipeline: scheduler, dedup, card, telegram, twitter
 │   ├── scrapers/            # pelando_scraper, promobit_scraper, mercadolivre
-│   └── api/                 # deals (achadinhos) + search (comparação Mercado Livre)
+│   ├── api/                 # deals (achadinhos) + search (comparação Mercado Livre)
+│   └── tests/                # suíte pytest (~87% de cobertura)
 └── frontend/                # página Next.js — lista, busca e filtra os achadinhos
     ├── .env.local            # NEXT_PUBLIC_API_URL
     └── src/

@@ -8,6 +8,11 @@ backend/__pycache__/
 # Sessão do navegador (Twitter/X) — contém cookies de login, é um segredo
 backend/data/
 
+# Testes
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+
 # Node / Next.js
 frontend/node_modules/
 frontend/.next/

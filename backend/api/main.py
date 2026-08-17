@@ -93,7 +93,8 @@ async def lifespan(app: FastAPI):
     logger.info("🔌 Encerrando Price Aggregator API...")
 
     if _redis_pool is not None:
-        await _redis_pool.close()
+        await _redis_pool.aclose()
+        _redis_pool = None
         logger.info("Redis desconectado.")
 
     logger.info("Bye! 👋")

@@ -1,0 +1,19 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+
+[tool.coverage.run]
+source = ["api", "bot", "core", "scrapers"]
+omit = ["*/venv/*", "*/tests/*", "*/__init__.py"]
+# SQLAlchemy async usa greenlet internamente — sem isso, o coverage perde
+# a rastreabilidade de linhas dentro de código async e reporta falsos "não cobertos".
+concurrency = ["greenlet"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
