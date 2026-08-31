@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     log_format: str = "texto"  # "texto" (legível, dev) ou "json" (estruturado, produção)
+    public_base_url: str = "http://localhost:8000"
 
     # ---- PostgreSQL ----
     database_url: str = "postgresql+asyncpg://root:password@localhost:5432/achadinhos"
@@ -49,15 +50,18 @@ class Settings(BaseSettings):
     amazon_partner_tag: str = ""
 
     # ---- Cache TTLs (segundos) ----
-    cache_ttl_mercadolivre: int = 900   # 15 min
-    cache_ttl_amazon: int = 1800        # 30 min
-    cache_ttl_default: int = 900        # 15 min
+    cache_ttl_mercadolivre: int = 900
+    cache_ttl_amazon: int = 1800
+    cache_ttl_default: int = 900
 
     # ---- Bot de Achadinhos ----
     deal_check_interval_minutes: int = 5
     deal_min_discount_pct: float = 15.0
     deal_dedup_ttl_days: int = 7
-    telegram_post_cooldown_seconds: int = 120  # 2 min entre posts
+    telegram_post_cooldown_seconds: int = 120
+
+    # Quando True, Shopee/Magalu/Temu só são publicados se houver affiliate_url.
+    affiliate_require_monetizable: bool = True
 
     model_config = {
         "env_file": ".env",
