@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -27,9 +28,12 @@ _scheduler: AsyncIOScheduler | None = None
 SCRAPERS: list[DealScraper] = [PelandoScraper(), PromobitScraper()]
 
 
-def _tracking_url(deal_id: Any, source: str) -> str:
+def _tracking_url(deal_id: Any, source: str) -> str | None:
     settings = get_settings()
     base = getattr(settings, "public_base_url", "http://localhost:8000").rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme != "https" or parsed.hostname in {"localhost", "127.0.0.1"}:
+        return None
     return f"{base}/go/{deal_id}?src={source}"
 
 
@@ -227,14 +231,18 @@ async def _processar_ofertas(
 
             telegram_oferta = dict(oferta)
             if deal_id:
-                telegram_oferta["affiliate_url"] = _tracking_url(deal_id, "telegram")
+                tracking_url = _tracking_url(deal_id, "telegram")
+                if tracking_url:
+                    telegram_oferta["affiliate_url"] = tracking_url
             tg_msg_id = await publicar_no_telegram(telegram_oferta, card_bytes)
 
             twitter_ok = False
             if twitter_pronto:
                 twitter_oferta = dict(oferta)
                 if deal_id:
-                    twitter_oferta["affiliate_url"] = _tracking_url(deal_id, "twitter")
+                    tracking_url = _tracking_url(deal_id, "twitter")
+                    if tracking_url:
+                        twitter_oferta["affiliate_url"] = tracking_url
                 twitter_ok = await publicar_no_twitter(twitter_oferta, card_bytes)
 
             if tg_msg_id or twitter_ok:

@@ -76,6 +76,16 @@ def test_tracking_url_uses_public_base_url(monkeypatch):
     assert url == "https://achadinhos.exemplo.com/go/abc-123?src=telegram"
 
 
+def test_tracking_url_local_is_disabled(monkeypatch):
+    monkeypatch.setattr(
+        scheduler,
+        "get_settings",
+        lambda: SimpleNamespace(public_base_url="http://localhost:8000"),
+    )
+
+    assert scheduler._tracking_url("abc-123", "telegram") is None
+
+
 @pytest.mark.asyncio
 async def test_temu_uses_configured_affiliate_fallback(monkeypatch):
     async def not_posted(_url: str) -> bool:
