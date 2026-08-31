@@ -38,3 +38,17 @@ def test_preserva_link_afiliado_existente():
     assert result.marketplace == "shopee"
     assert result.monetizable is True
     assert result.affiliate_url == affiliate_url
+
+
+def test_usa_link_padrao_da_temu_quando_oferta_nao_tem_afiliado():
+    result = enrich_affiliate_data(
+        {
+            "store": "Temu",
+            "url": "https://www.temu.com/br/produto/123",
+        },
+        fallback_urls={"temu": "https://temu.to/k/exemplo"},
+    )
+
+    assert result.marketplace == "temu"
+    assert result.monetizable is True
+    assert result.affiliate_url == "https://temu.to/k/exemplo"

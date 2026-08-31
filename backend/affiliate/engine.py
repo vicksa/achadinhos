@@ -58,7 +58,10 @@ def identify_marketplace(url: str | None = None, store: str | None = None) -> st
     return None
 
 
-def enrich_affiliate_data(deal: dict) -> AffiliateResult:
+def enrich_affiliate_data(
+    deal: dict,
+    fallback_urls: dict[str, str] | None = None,
+) -> AffiliateResult:
     """Normaliza dados de afiliado sem fabricar links.
 
     Para marketplaces suportados, uma oferta só é marcada como monetizável
@@ -79,6 +82,14 @@ def enrich_affiliate_data(deal: dict) -> AffiliateResult:
                 affiliate_url=affiliate_url,
                 monetizable=True,
                 reason="affiliate_url presente",
+            )
+        fallback_url = (fallback_urls or {}).get(marketplace, "").strip() or None
+        if fallback_url:
+            return AffiliateResult(
+                marketplace=marketplace,
+                affiliate_url=fallback_url,
+                monetizable=True,
+                reason="link afiliado padrão configurado",
             )
         return AffiliateResult(
             marketplace=marketplace,

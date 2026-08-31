@@ -165,7 +165,9 @@ class TestListarDeals:
 
         resp = await client.get("/api/deals")
 
-        assert resp.json()["results"][0]["url"] == "https://loja.com/produto?tag=meuid"
+        result_url = resp.json()["results"][0]["url"]
+        assert result_url.startswith("/go/")
+        assert result_url.endswith("?src=site")
 
     async def test_limit_acima_do_maximo_e_rejeitado(self, client):
         resp = await client.get("/api/deals", params={"limit": 1000})

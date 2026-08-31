@@ -64,6 +64,8 @@ class Settings(BaseSettings):
 
     # Quando True, Shopee/Magalu/Temu só são publicados se houver affiliate_url.
     affiliate_require_monetizable: bool = True
+    temu_affiliate_url: str = ""
+    temu_affiliate_code: str = ""
 
     @field_validator("database_url", mode="before")
     @classmethod

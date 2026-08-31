@@ -29,7 +29,7 @@ SCRAPERS: list[DealScraper] = [PelandoScraper(), PromobitScraper()]
 
 def _tracking_url(deal_id: Any, source: str) -> str:
     settings = get_settings()
-    base = settings.public_base_url.rstrip("/")
+    base = getattr(settings, "public_base_url", "http://localhost:8000").rstrip("/")
     return f"{base}/go/{deal_id}?src={source}"
 
 
@@ -62,12 +62,17 @@ async def _filtrar_ofertas_novas(
             )
             continue
 
-        affiliate = enrich_affiliate_data(oferta)
+        affiliate = enrich_affiliate_data(
+            oferta,
+            fallback_urls={
+                "temu": getattr(settings, "temu_affiliate_url", ""),
+            },
+        )
         if affiliate.affiliate_url:
             oferta["affiliate_url"] = affiliate.affiliate_url
 
         if (
-            settings.affiliate_require_monetizable
+            getattr(settings, "affiliate_require_monetizable", False)
             and affiliate.marketplace in SUPPORTED_MARKETPLACES
             and not affiliate.monetizable
         ):
