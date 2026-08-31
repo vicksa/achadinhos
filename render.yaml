@@ -3,14 +3,16 @@ services:
     name: achadinhos-api
     runtime: docker
     rootDir: backend
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./Dockerfile.render
     plan: free
-    healthCheckPath: /health
+    healthCheckPath: /ready
     envVars:
       - key: ENVIRONMENT
         value: production
       - key: LOG_LEVEL
         value: INFO
+      - key: LOG_FORMAT
+        value: json
       - key: PUBLIC_BASE_URL
         sync: false
       - key: DATABASE_URL
@@ -23,4 +25,4 @@ services:
         sync: false
       - key: AFFILIATE_REQUIRE_MONETIZABLE
         value: "true"
-    dockerCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    dockerCommand: sh -c 'python -m core.bootstrap_db && uvicorn api.main:app --host 0.0.0.0 --port $PORT'
