@@ -44,7 +44,6 @@ class Product(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Relacionamentos
     offers: Mapped[list["Offer"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     alerts: Mapped[list["PriceAlert"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
@@ -72,7 +71,6 @@ class Offer(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    # Relacionamentos
     product: Mapped["Product"] = relationship(back_populates="offers")
 
     __table_args__ = (
@@ -96,7 +94,6 @@ class PriceAlert(Base):
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Relacionamentos
     product: Mapped["Product"] = relationship(back_populates="alerts")
 
 
@@ -111,7 +108,7 @@ class Deal(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    source: Mapped[str | None] = mapped_column(String(50))  # pelando, promobit, amazon...
+    source: Mapped[str | None] = mapped_column(String(50))
     title: Mapped[str | None] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
     price: Mapped[float | None] = mapped_column(Numeric(10, 2))
@@ -121,12 +118,9 @@ class Deal(Base):
     affiliate_url: Mapped[str | None] = mapped_column(Text)
     image_url: Mapped[str | None] = mapped_column(Text)
     store: Mapped[str | None] = mapped_column(String(100))
-    quality_score: Mapped[float | None] = mapped_column(Numeric(5, 2))  # 0-100
+    quality_score: Mapped[float | None] = mapped_column(Numeric(5, 2))
 
-    # Status de publicação
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending"
-    )  # pending, approved, rejected, published
+    status: Mapped[str] = mapped_column(String(20), default="pending")
     published_tg: Mapped[bool] = mapped_column(Boolean, default=False)
     published_ig: Mapped[bool] = mapped_column(Boolean, default=False)
     published_twitter: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -138,8 +132,39 @@ class Deal(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    clicks: Mapped[list["DealClick"]] = relationship(
+        back_populates="deal", cascade="all, delete-orphan"
+    )
+
     __table_args__ = (
         Index("idx_deals_status", "status"),
         Index("idx_deals_source", "source"),
         Index("idx_deals_created", "created_at"),
+    )
+
+
+class DealClick(Base):
+    """Clique rastreado antes do redirecionamento para o link da oferta."""
+    __tablename__ = "deal_clicks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    deal_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("deals.id", ondelete="CASCADE"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="direct")
+    campaign: Mapped[str | None] = mapped_column(String(100))
+    referrer: Mapped[str | None] = mapped_column(Text)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    clicked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    deal: Mapped["Deal"] = relationship(back_populates="clicks")
+
+    __table_args__ = (
+        Index("idx_deal_clicks_deal", "deal_id"),
+        Index("idx_deal_clicks_source", "source"),
+        Index("idx_deal_clicks_clicked", "clicked_at"),
     )
