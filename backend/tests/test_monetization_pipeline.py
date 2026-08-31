@@ -103,3 +103,36 @@ async def test_temu_uses_configured_affiliate_fallback(monkeypatch):
 
     result = await scheduler._filtrar_ofertas_novas(offers)
     assert result[0]["affiliate_url"] == "https://temu.to/k/gjj9tmr3rdo"
+
+
+@pytest.mark.asyncio
+async def test_magalu_uses_influencer_store_fallback(monkeypatch):
+    async def not_posted(_url: str) -> bool:
+        return False
+
+    monkeypatch.setattr(scheduler, "ja_foi_postado", not_posted)
+    monkeypatch.setattr(
+        scheduler,
+        "get_settings",
+        lambda: SimpleNamespace(
+            deal_min_discount_pct=10.0,
+            affiliate_require_monetizable=True,
+            magalu_affiliate_url=(
+                "https://www.magazinevoce.com.br/magazinedescontovipi/"
+            ),
+        ),
+    )
+
+    offers = [
+        {
+            "title": "Produto Magalu",
+            "url": "https://www.magazineluiza.com.br/produto-x",
+            "store": "Magalu",
+            "discount_pct": 30,
+        }
+    ]
+
+    result = await scheduler._filtrar_ofertas_novas(offers)
+    assert result[0]["affiliate_url"] == (
+        "https://www.magazinevoce.com.br/magazinedescontovipi/"
+    )

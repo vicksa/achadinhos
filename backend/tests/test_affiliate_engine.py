@@ -52,3 +52,21 @@ def test_usa_link_padrao_da_temu_quando_oferta_nao_tem_afiliado():
     assert result.marketplace == "temu"
     assert result.monetizable is True
     assert result.affiliate_url == "https://temu.to/k/exemplo"
+
+
+def test_usa_loja_do_influenciador_magalu_como_fallback():
+    result = enrich_affiliate_data(
+        {
+            "store": "Magalu",
+            "url": "https://www.magazineluiza.com.br/produto/123",
+        },
+        fallback_urls={
+            "magalu": "https://www.magazinevoce.com.br/magazinedescontovipi/"
+        },
+    )
+
+    assert result.marketplace == "magalu"
+    assert result.monetizable is True
+    assert result.affiliate_url == (
+        "https://www.magazinevoce.com.br/magazinedescontovipi/"
+    )

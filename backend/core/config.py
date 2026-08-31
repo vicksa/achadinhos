@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     affiliate_require_monetizable: bool = True
     temu_affiliate_url: str = ""
     temu_affiliate_code: str = ""
+    magalu_affiliate_url: str = ""
 
     @field_validator("database_url", mode="before")
     @classmethod

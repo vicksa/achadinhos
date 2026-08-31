@@ -66,6 +66,7 @@ async def _filtrar_ofertas_novas(
             oferta,
             fallback_urls={
                 "temu": getattr(settings, "temu_affiliate_url", ""),
+                "magalu": getattr(settings, "magalu_affiliate_url", ""),
             },
         )
         if affiliate.affiliate_url:

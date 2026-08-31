@@ -38,6 +38,8 @@ services:
         value: https://temu.to/k/gjj9tmr3rdo
       - key: TEMU_AFFILIATE_CODE
         value: alp663569
+      - key: MAGALU_AFFILIATE_URL
+        value: https://www.magazinevoce.com.br/magazinedescontovipi/
 
   - type: web
     name: achadinhos-web
