@@ -81,6 +81,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8000",
+    "https://achadinhos-web-c74w.onrender.com",
 ]
 
 frontend_url = _settings_iniciais.frontend_url.rstrip("/")

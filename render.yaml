@@ -18,7 +18,7 @@ services:
       - key: PUBLIC_BASE_URL
         value: https://achadinhos-api-4by9.onrender.com
       - key: FRONTEND_URL
-        value: https://achadinhos-web.onrender.com
+        value: https://achadinhos-web-c74w.onrender.com
       - key: DATABASE_URL
         fromDatabase:
           name: achadinhos-db
