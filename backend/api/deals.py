@@ -1,13 +1,4 @@
-"""
-Router de achadinhos (ofertas coletadas pelo bot).
-
-Expõe para o frontend as ofertas que o pipeline (`bot/scheduler.py`) já
-coletou e salvou no banco — a mesma informação que é publicada no
-Telegram, servida aqui para alimentar a página pública de achadinhos.
-
-Endpoints:
-    GET /api/deals — Lista achadinhos com busca, filtro e ordenação
-"""
+"""Router público de achadinhos."""
 
 import logging
 
@@ -19,22 +10,12 @@ from core.database import AsyncSessionLocal
 from core.models import Deal
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/deals", tags=["Achadinhos"])
-
 MAX_LIMIT = 100
 
 
 def _para_deal_out(deal: Deal) -> DealOut:
-    """
-    Converte uma instância do modelo ORM `Deal` para o schema público.
-
-    Args:
-        deal: Instância de Deal carregada do banco.
-
-    Returns:
-        DealOut pronto para serialização JSON.
-    """
+    """Converte Deal ORM para a representação pública rastreável."""
     return DealOut(
         id=str(deal.id),
         title=deal.title or "Achadinho",
@@ -42,7 +23,9 @@ def _para_deal_out(deal: Deal) -> DealOut:
         price=float(deal.price) if deal.price is not None else None,
         price_original=float(deal.price_original) if deal.price_original is not None else None,
         discount_pct=float(deal.discount_pct) if deal.discount_pct is not None else None,
-        url=deal.affiliate_url or deal.url,
+        # O frontend não recebe mais diretamente a URL do marketplace.
+        # Assim, cliques no site passam pelo tracking antes do redirecionamento.
+        url=f"/go/{deal.id}?src=site",
         image_url=deal.image_url,
         store=deal.store,
         source=deal.source,
@@ -51,44 +34,15 @@ def _para_deal_out(deal: Deal) -> DealOut:
     )
 
 
-@router.get(
-    "",
-    response_model=DealListResponse,
-    summary="Listar achadinhos",
-    description=(
-        "Lista as ofertas coletadas pelo bot, com busca por texto, filtro "
-        "por loja/desconto mínimo e ordenação."
-    ),
-)
+@router.get("", response_model=DealListResponse, summary="Listar achadinhos")
 async def listar_deals(
-    q: str | None = Query(
-        default=None,
-        max_length=200,
-        description="Busca por texto no título do achadinho",
-    ),
-    store: str | None = Query(
-        default=None,
-        description="Filtrar por loja (ex: Amazon, Magalu)",
-    ),
-    min_discount: float | None = Query(
-        default=None,
-        ge=0,
-        le=100,
-        description="Desconto mínimo (%) — ofertas sem desconto conhecido são excluídas se usado",
-    ),
-    sort_by: DealSortOption = Query(
-        default=DealSortOption.NEWEST,
-        description="Critério de ordenação",
-    ),
+    q: str | None = Query(default=None, max_length=200),
+    store: str | None = Query(default=None),
+    min_discount: float | None = Query(default=None, ge=0, le=100),
+    sort_by: DealSortOption = Query(default=DealSortOption.NEWEST),
     limit: int = Query(default=24, ge=1, le=MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> DealListResponse:
-    """
-    Endpoint principal da página de achadinhos.
-
-    Sempre exige que a oferta tenha preço válido (> 0) — descarta
-    registros incompletos que possam ter ficado no banco.
-    """
     async with AsyncSessionLocal() as session:
         condicoes = [Deal.price.is_not(None), Deal.price > 0]
 
