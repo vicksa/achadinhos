@@ -83,6 +83,10 @@ ALLOWED_ORIGINS = [
     "http://localhost:8000",
 ]
 
+frontend_url = _settings_iniciais.frontend_url.rstrip("/")
+if frontend_url and frontend_url not in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,

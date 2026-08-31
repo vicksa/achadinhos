@@ -3,6 +3,7 @@ Configuração centralizada da aplicação.
 Carrega variáveis do .env via Pydantic Settings.
 """
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "texto"  # "texto" (legível, dev) ou "json" (estruturado, produção)
     public_base_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:3000"
 
     # ---- PostgreSQL ----
     database_url: str = "postgresql+asyncpg://root:password@localhost:5432/achadinhos"
@@ -62,6 +64,16 @@ class Settings(BaseSettings):
 
     # Quando True, Shopee/Magalu/Temu só são publicados se houver affiliate_url.
     affiliate_require_monetizable: bool = True
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def usar_driver_asyncpg(cls, value: object) -> object:
+        """Aceita a connection string nativa fornecida pelo Render."""
+        if isinstance(value, str) and value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if isinstance(value, str) and value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        return value
 
     model_config = {
         "env_file": ".env",

@@ -1,10 +1,12 @@
 services:
   - type: web
     name: achadinhos-api
-    runtime: docker
+    runtime: python
     rootDir: backend
-    dockerfilePath: ./Dockerfile.render
     plan: free
+    region: oregon
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: python -m core.bootstrap_db && uvicorn api.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /ready
     envVars:
       - key: ENVIRONMENT
@@ -14,15 +16,43 @@ services:
       - key: LOG_FORMAT
         value: json
       - key: PUBLIC_BASE_URL
-        sync: false
+        value: https://achadinhos-api-4by9.onrender.com
+      - key: FRONTEND_URL
+        value: https://achadinhos-web.onrender.com
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: achadinhos-db
+          property: connectionString
       - key: REDIS_URL
-        sync: false
+        fromService:
+          name: achadinhos-kv
+          type: keyvalue
+          property: connectionString
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHANNEL_ID
         sync: false
       - key: AFFILIATE_REQUIRE_MONETIZABLE
         value: "true"
-    dockerCommand: sh -c 'python -m core.bootstrap_db && uvicorn api.main:app --host 0.0.0.0 --port $PORT'
+
+  - type: web
+    name: achadinhos-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./out
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://achadinhos-api-4by9.onrender.com
+
+  - type: keyvalue
+    name: achadinhos-kv
+    plan: free
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+databases:
+  - name: achadinhos-db
+    plan: free
+    region: oregon
