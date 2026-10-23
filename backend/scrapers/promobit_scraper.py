@@ -64,6 +64,11 @@ def _processar_oferta(item: dict[str, Any]) -> dict[str, Any] | None:
     slug = item.get("offerSlug")
     preco = item.get("offerPrice")
 
+    if item.get("offerStatusName", "APPROVED") != "APPROVED":
+        return None
+    if (item.get("storeName") or "").strip().lower() == "promobit":
+        return None  # Card publicitário da própria plataforma, sem produto.
+
     if not titulo or not slug or preco is None or preco <= 0:
         return None
 
@@ -97,7 +102,10 @@ def _processar_oferta(item: dict[str, Any]) -> dict[str, Any] | None:
         # docstring do módulo) — usamos a página da oferta no Promobit.
         "url": f"https://www.promobit.com.br/oferta/{slug}/",
         "affiliate_url": None,
-        "image_url": None,
+        "image_url": (
+            f"https://i.promobit.com.br/268/{str(item['offerPhoto']).lstrip('/')}"
+            if item.get("offerPhoto") else None
+        ),
         "store": item.get("storeName"),
         "quality_score": calcular_quality_score(discount_pct, sinal_popularidade),
         "status": "pending",

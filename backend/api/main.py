@@ -2,7 +2,9 @@
 Aplicação principal FastAPI — Price Aggregator API.
 """
 
+import asyncio
 import logging
+from contextlib import suppress
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -54,7 +56,17 @@ async def lifespan(app: FastAPI):
         logger.warning("⚠️ Banco de dados indisponível (%s).", exc)
 
     logger.info("✅ Price Aggregator API pronta!")
-    yield
+    collector_task = None
+    if getattr(settings, "site_deal_collection_enabled", False):
+        from core.deal_collector import run_site_collector
+        collector_task = asyncio.create_task(run_site_collector())
+    try:
+        yield
+    finally:
+        if collector_task is not None:
+            collector_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await collector_task
 
     logger.info("🔌 Encerrando Price Aggregator API...")
     if _redis_pool is not None:

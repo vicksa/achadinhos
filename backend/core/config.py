@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     deal_min_discount_pct: float = 15.0
     deal_dedup_ttl_days: int = 7
     telegram_post_cooldown_seconds: int = 120
+    site_deal_collection_enabled: bool = False
 
     # Quando True, Shopee/Magalu/Temu/SHEIN só são publicados se houver affiliate_url.
     affiliate_require_monetizable: bool = True

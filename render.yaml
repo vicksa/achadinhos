@@ -34,6 +34,8 @@ services:
         sync: false
       - key: AFFILIATE_REQUIRE_MONETIZABLE
         value: "true"
+      - key: SITE_DEAL_COLLECTION_ENABLED
+        value: "true"
       - key: TEMU_AFFILIATE_URL
         value: https://temu.to/k/gjj9tmr3rdo
       - key: TEMU_AFFILIATE_CODE

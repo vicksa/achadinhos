@@ -54,6 +54,18 @@ def _oferta_bruta(**overrides) -> dict:
 
 
 class TestColetarOfertasPromobit:
+    async def test_imagem_e_ofertas_ativas(self):
+        ofertas = [
+            _oferta_bruta(offerPhoto="/produto.jpg"),
+            _oferta_bruta(offerStatusName="EXPIRED"),
+            _oferta_bruta(storeName="Promobit"),
+        ]
+        with respx.mock:
+            respx.get(HOMEPAGE_URL).mock(return_value=httpx.Response(200, text=_html_com_ofertas(ofertas)))
+            resultado = await coletar_ofertas_promobit()
+        assert len(resultado) == 1
+        assert resultado[0]["image_url"] == "https://i.promobit.com.br/268/produto.jpg"
+
     async def test_parseia_oferta_valida(self):
         html = _html_com_ofertas([_oferta_bruta()])
         with respx.mock:

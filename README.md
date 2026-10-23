@@ -266,3 +266,21 @@ ficam retidas. Não existe fallback para a página inicial da SHEIN: cada oferta
 precisa do seu destino convertido. Isso não cria um scraper nem acessa o
 painel privado de afiliados. Para instalações existentes, atualize também a
 variável no ambiente de execução; alterar o exemplo não altera o `.env` local.
+
+
+### Coleta do catálogo no Render
+
+`SITE_DEAL_COLLECTION_ENABLED=true` inicia uma coleta ao subir a API e repete
+a consulta a cada `DEAL_CHECK_INTERVAL_MINUTES` (5 minutos por padrão).
+Alimenta somente o catálogo do site: não gera cards nem envia mensagens para
+Telegram/X. Pode ser desativada quando houver um coletor separado.
+
+As fontes continuam Pelando e Promobit; o coletor respeita o desconto mínimo
+e as regras de monetização, atualiza registros pela URL e preserva links de
+produto cadastrados manualmente quando a fonte não fornece outro. Ofertas
+sem atualização por 24 horas deixam de aparecer no catálogo. Falhas de uma
+fonte não interrompem a API nem apagam o catálogo.
+
+No Render Free, a coleta acompanha o processo da API: pausa durante o sono
+do serviço e retoma quando ele acorda. Isso não fornece um bot independente
+24 horas por dia.

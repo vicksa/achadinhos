@@ -44,7 +44,10 @@ async def listar_deals(
     offset: int = Query(default=0, ge=0),
 ) -> DealListResponse:
     async with AsyncSessionLocal() as session:
-        condicoes = [Deal.price.is_not(None), Deal.price > 0]
+        condicoes = [
+            Deal.price.is_not(None), Deal.price > 0,
+            or_(Deal.expires_at.is_(None), Deal.expires_at > func.now()),
+        ]
 
         if q:
             termo = func.unaccent(f"%{q.strip()}%")
