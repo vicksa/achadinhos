@@ -72,3 +72,18 @@ diariamente no app, sem mensagens repetitivas ou promessas de resultados.
 
 O arquivo `tiktok-calendar.csv` organiza as oportunidades do mês. Ele é um plano
 editorial; a confirmação de agendamento vem exclusivamente da fila do Metricool.
+
+
+## Apresentadora virtual — padrão autorizado
+
+Todos os próximos vídeos usam abertura de 3 segundos com a mesma personagem
+virtual ilustrada, seguida de imagens reais do anúncio e uma pergunta específica
+no final. Abertura identificada como gerada por IA e marcação TikTok `isAigc=true`.
+A personagem é uma ilustração animada sem fala; não há avatar falante conectado.
+Não simular uso, aperto, teste ou depoimento pessoal. Demonstração prática exige
+vídeo real autorizado do produto.
+
+O padrão fica em `presenter_style.py`, com asset em
+`templates/assets/presenter.png`, ativado por `virtual_presenter` no config.
+A seleção de música nativa do TikTok permanece pendente de acesso ao catálogo;
+as trilhas instrumentais originais são preservadas.
