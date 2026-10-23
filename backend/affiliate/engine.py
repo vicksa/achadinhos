@@ -10,12 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-SUPPORTED_MARKETPLACES = {"shopee", "magalu", "temu"}
+SUPPORTED_MARKETPLACES = {"shopee", "magalu", "temu", "shein"}
 
 _DOMAIN_MAP = {
     "shopee": ("shopee.com.br", "shope.ee"),
     "magalu": ("magazineluiza.com.br", "magalu.com", "magazinevoce.com.br"),
     "temu": ("temu.com",),
+    "shein": ("shein.com", "shein.com.br", "shein.top"),
 }
 
 _STORE_ALIASES = {
@@ -25,6 +26,7 @@ _STORE_ALIASES = {
     "magazine luiza": "magalu",
     "magazineluiza": "magalu",
     "temu": "temu",
+    "shein": "shein",
 }
 
 
@@ -46,7 +48,7 @@ def _host(url: str | None) -> str:
 
 
 def identify_marketplace(url: str | None = None, store: str | None = None) -> str | None:
-    """Identifica Shopee, Magalu ou Temu a partir da loja e/ou URL."""
+    """Identifica Shopee, Magalu, Temu ou SHEIN a partir da loja e/ou URL."""
     normalized_store = (store or "").strip().lower()
     if normalized_store in _STORE_ALIASES:
         return _STORE_ALIASES[normalized_store]

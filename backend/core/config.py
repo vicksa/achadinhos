@@ -62,11 +62,13 @@ class Settings(BaseSettings):
     deal_dedup_ttl_days: int = 7
     telegram_post_cooldown_seconds: int = 120
 
-    # Quando True, Shopee/Magalu/Temu só são publicados se houver affiliate_url.
+    # Quando True, Shopee/Magalu/Temu/SHEIN só são publicados se houver affiliate_url.
     affiliate_require_monetizable: bool = True
     temu_affiliate_url: str = ""
     temu_affiliate_code: str = ""
     magalu_affiliate_url: str = ""
+    # Apenas identificação da conta; não gera links nem autentica na SHEIN.
+    shein_affiliate_id: str = ""
 
     @field_validator("database_url", mode="before")
     @classmethod

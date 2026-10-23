@@ -243,3 +243,26 @@ achadinhos/
         ├── components/        # DealCard, SearchArea, ui/ (button, input, badge, card)
         └── lib/api.ts          # cliente da API (fetchDeals)
 ```
+
+
+### Afiliados SHEIN
+
+A SHEIN faz parte dos marketplaces com proteção de monetização. O backend
+reconhece lojas `SHEIN`, domínios `shein.com`, `shein.com.br` e links curtos
+`shein.top` (incluindo subdomínios).
+
+A conta do Achou, Amou! tem ID `4019106160`, configurado em
+`SHEIN_AFFILIATE_ID` no `.env.example` e no blueprint do Render. Esse campo é
+apenas identificação: não autentica a conta nem gera links com comissão.
+
+Para cada produto, use **SHEIN Affiliate → Converter Link** e forneça o link
+obtido no campo `affiliate_url` da oferta. O pipeline preserva esse link sem
+modificá-lo. Não acrescente o ID da conta à URL manualmente. Uma URL comum
+ou curta da SHEIN, sozinha, não comprova afiliação e não é promovida
+automaticamente para `affiliate_url`.
+
+Com `AFFILIATE_REQUIRE_MONETIZABLE=true` (padrão), ofertas SHEIN sem esse campo
+ficam retidas. Não existe fallback para a página inicial da SHEIN: cada oferta
+precisa do seu destino convertido. Isso não cria um scraper nem acessa o
+painel privado de afiliados. Para instalações existentes, atualize também a
+variável no ambiente de execução; alterar o exemplo não altera o `.env` local.
